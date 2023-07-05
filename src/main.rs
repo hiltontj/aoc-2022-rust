@@ -19,5 +19,5 @@ fn main() {
     println!("Day 5 (Part 1): {answer}", answer = day_05::answer_part_1());
     println!("Day 5 (Part 2): {answer}", answer = day_05::answer_part_2());
     println!("Day 6 (Part 1): {answer}", answer = day_06::answer_part_1());
-    // println!("Day 6 (Part 2): {answer}", answer = day_06::answer_part_2());
+    println!("Day 6 (Part 2): {answer}", answer = day_06::answer_part_2());
 }
