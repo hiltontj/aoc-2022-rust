@@ -24,22 +24,33 @@ use crate::utils::get_lines;
 */
 
 pub fn answer_part_1() -> String {
-    let mut stack_list = StackList::default();
+    let mut cargo_bay = CargoBay::new_9000();
     for line in get_lines("input/day_05.txt").map(Result::unwrap) {
-        if !stack_list.process_input_line(&line) {
+        if !cargo_bay.process_input_line(&line) {
             continue;
         }
     }
     for line in get_lines("input/day_05.txt").map(Result::unwrap) {
         if let Ok(instruction) = line.parse::<Instruction>() {
-            stack_list.move_crate(instruction);
+            cargo_bay.move_crate(instruction);
         }
     }
-    stack_list
-        .0
-        .into_iter()
-        .map(|(_, stack)| stack.borrow_mut().pop_front().expect("stack not empty").0)
-        .collect::<String>()
+    cargo_bay.list_top_crates()
+}
+
+pub fn answer_part_2() -> String {
+    let mut cargo_bay = CargoBay::new_9001();
+    for line in get_lines("input/day_05.txt").map(Result::unwrap) {
+        if !cargo_bay.process_input_line(&line) {
+            continue;
+        }
+    }
+    for line in get_lines("input/day_05.txt").map(Result::unwrap) {
+        if let Ok(instruction) = line.parse::<Instruction>() {
+            cargo_bay.move_crate(instruction);
+        }
+    }
+    cargo_bay.list_top_crates()
 }
 
 #[derive(Debug)]
@@ -71,31 +82,63 @@ impl DerefMut for CrateStack {
     }
 }
 
-#[derive(Default)]
-struct StackList(BTreeMap<usize, RefCell<CrateStack>>);
+struct CargoBay {
+    stack_list: BTreeMap<usize, RefCell<CrateStack>>,
+    crane: Crane,
+}
 
-impl StackList {
+impl CargoBay {
+    fn new_9000() -> Self {
+        Self {
+            stack_list: Default::default(),
+            crane: Crane::NineThousand,
+        }
+    }
+
+    fn new_9001() -> Self {
+        Self {
+            stack_list: Default::default(),
+            crane: Crane::NineThousandOne(Default::default()),
+        }
+    }
+
     fn move_crate(&self, instruction: Instruction) {
         let mut from = self
-            .0
+            .stack_list
             .get(&instruction.from)
             .expect("valid from instruction")
             .borrow_mut();
         let mut to = self
-            .0
+            .stack_list
             .get(&instruction.to)
             .expect("valid to instruction")
             .borrow_mut();
-        for _ in 0..instruction.amount {
-            to.push_front(
-                from.pop_front()
-                    .expect("could not pop a crate off from stack"),
-            );
+        match self.crane {
+            Crane::NineThousand => {
+                for _ in 0..instruction.amount {
+                    to.push_front(
+                        from.pop_front()
+                            .expect("could not pop a crate off from stack"),
+                    );
+                }
+            }
+            Crane::NineThousandOne(ref buffer) => {
+                let mut buffer = buffer.borrow_mut();
+                for _ in 0..instruction.amount {
+                    buffer.push(
+                        from.pop_front()
+                            .expect("could not pop a crate off from stack"),
+                    );
+                }
+                while let Some(crt) = buffer.pop() {
+                    to.push_front(crt);
+                }
+            }
         }
     }
 
     fn insert_crate(&mut self, slot: usize, crt: Crate) {
-        let stack = self.0.entry(slot).or_insert(Default::default());
+        let stack = self.stack_list.entry(slot).or_insert(Default::default());
         stack.borrow_mut().push_back(crt);
     }
 
@@ -114,6 +157,13 @@ impl StackList {
             }
         }
         crates_inserted
+    }
+
+    fn list_top_crates(&self) -> String {
+        self.stack_list
+            .iter()
+            .map(|(_, stack)| stack.borrow_mut().pop_front().expect("stack not empty").0)
+            .collect::<String>()
     }
 }
 
@@ -154,4 +204,9 @@ impl FromStr for Instruction {
             .map_err(|_| format!("to stack is valid usize"))?;
         Ok(Self { amount, from, to })
     }
+}
+
+enum Crane {
+    NineThousand,
+    NineThousandOne(RefCell<Vec<Crate>>),
 }
