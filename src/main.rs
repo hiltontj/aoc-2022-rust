@@ -3,6 +3,7 @@ mod day_02;
 mod day_03;
 mod day_04;
 mod day_05;
+mod day_06;
 
 mod utils;
 
@@ -17,4 +18,6 @@ fn main() {
     println!("Day 4 (Part 2): {answer}", answer = day_04::answer_part_2());
     println!("Day 5 (Part 1): {answer}", answer = day_05::answer_part_1());
     println!("Day 5 (Part 2): {answer}", answer = day_05::answer_part_2());
+    println!("Day 6 (Part 1): {answer}", answer = day_06::answer_part_1());
+    // println!("Day 6 (Part 2): {answer}", answer = day_06::answer_part_2());
 }
