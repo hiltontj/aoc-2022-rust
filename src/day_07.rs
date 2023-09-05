@@ -1,7 +1,11 @@
 use crate::utils::get_lines;
 
-pub fn answer_part_1() -> u64 {
+const TOTAL_FS_SPACE: u64 = 70_000_000;
+const DESIRED_SPACE: u64 = 30_000_000;
+
+pub fn answer_part_1() -> (u64, u64) {
     let mut result = 0;
+    let mut used_space = 0;
     let mut stack = Vec::new();
 
     for line in get_lines("input/day_07.txt").map(Result::unwrap) {
@@ -9,7 +13,7 @@ pub fn answer_part_1() -> u64 {
         let p = Line::parse(&tokens);
         match p {
             Line::Command(cmd) => match cmd {
-                Command::CdInto { target: _ } => stack.push(0),
+                Command::CdInto => stack.push(0),
                 Command::CdOut => {
                     let current = stack.pop().unwrap();
                     if current <= 100_000 {
@@ -22,8 +26,8 @@ pub fn answer_part_1() -> u64 {
                 Command::Ls => (),
             },
             Line::Node(node) => match node {
-                Node::Dir { name: _ } => (),
-                Node::File { name: _, size } => *stack.last_mut().unwrap() += size,
+                Node::Dir => (),
+                Node::File { size } => *stack.last_mut().unwrap() += size,
             },
         }
     }
@@ -32,8 +36,41 @@ pub fn answer_part_1() -> u64 {
         if n <= 100_000 {
             result += n;
         }
+        used_space += n;
     }
 
+    (result, used_space)
+}
+
+pub fn answer_part_2() -> u64 {
+    let (_, used_space) = answer_part_1();
+    let unused_space = TOTAL_FS_SPACE - used_space;
+    let min_size = DESIRED_SPACE - unused_space;
+    let mut result = u64::MAX;
+    let mut stack = Vec::new();
+    for line in get_lines("input/day_07.txt").map(Result::unwrap) {
+        let tokens = tokenize(&line);
+        let p = Line::parse(&tokens);
+        match p {
+            Line::Command(cmd) => match cmd {
+                Command::CdInto => stack.push(0),
+                Command::CdOut => {
+                    let current = stack.pop().unwrap();
+                    if current >= min_size {
+                        result = result.min(current);
+                    }
+                    if let Some(parent) = stack.last_mut() {
+                        *parent += current;
+                    }
+                }
+                Command::Ls => (),
+            },
+            Line::Node(node) => match node {
+                Node::Dir => (),
+                Node::File { size } => *stack.last_mut().unwrap() += size,
+            },
+        }
+    }
     result
 }
 
@@ -80,7 +117,7 @@ impl Line {
 }
 
 enum Command {
-    CdInto { target: String },
+    CdInto,
     CdOut,
     Ls,
 }
@@ -89,13 +126,9 @@ impl Command {
     fn parse(tokens: &[Token]) -> Result<Self, CommandParseError> {
         if let Some(Token::Dollar) = tokens.first() {
             match (tokens.get(1), tokens.get(2)) {
-                (Some(Token::Cd), Some(Token::Value(t))) => Ok(Self::CdInto {
-                    target: t.to_owned(),
-                }),
+                (Some(Token::Cd), Some(Token::Value(_))) => Ok(Self::CdInto),
                 (Some(Token::Cd), Some(Token::Up)) => Ok(Self::CdOut),
-                (Some(Token::Cd), Some(Token::Root)) => Ok(Self::CdInto {
-                    target: "ROOT".to_owned(),
-                }),
+                (Some(Token::Cd), Some(Token::Root)) => Ok(Self::CdInto),
                 (Some(Token::Ls), None) => Ok(Self::Ls),
                 _ => Err(CommandParseError::InvalidCommand),
             }
@@ -113,20 +146,17 @@ enum CommandParseError {
 }
 
 enum Node {
-    Dir { name: String },
-    File { name: String, size: u64 },
+    Dir,
+    File { size: u64 },
 }
 
 impl Node {
     fn parse(tokens: &[Token]) -> Result<Self, NodeParseError> {
         match (tokens.get(0), tokens.get(1)) {
-            (Some(Token::Dir), Some(Token::Value(n))) => Ok(Node::Dir { name: n.to_owned() }),
-            (Some(Token::Value(s)), Some(Token::Value(n))) => s
+            (Some(Token::Dir), Some(Token::Value(_))) => Ok(Node::Dir),
+            (Some(Token::Value(s)), Some(Token::Value(_))) => s
                 .parse::<u64>()
-                .map(|size| Node::File {
-                    name: n.to_owned(),
-                    size,
-                })
+                .map(|size| Node::File { size })
                 .map_err(|_| NodeParseError::InvalidSize),
             _ => Err(NodeParseError::NotNode),
         }
