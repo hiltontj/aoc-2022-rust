@@ -23,6 +23,7 @@ struct TreePatch<T> {
     size: (usize, usize),
 }
 
+// This is for debugging purposes
 impl std::fmt::Display for TreePatch<bool> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut disp: Vec<Vec<bool>> = vec![vec![Default::default(); self.n_cols()]; self.n_rows()];
@@ -51,18 +52,21 @@ impl<T> TreePatch<T> {
         }
     }
 
-    fn insert(&mut self, (x, y): (usize, usize), val: T) -> Option<T> {
+    fn insert(&mut self, (x, y): (usize, usize), val: T) {
         self.size.0 = self.size.0.max(x + 1);
         self.size.1 = self.size.1.max(y + 1);
-        self.grid.insert((x, y), val)
+        assert!(
+            self.grid.insert((x, y), val).is_none(),
+            "attempted insert to occupied slot ({x}, {y})"
+        );
     }
 
     fn row(&self, row: usize) -> RowIter<'_, T> {
         RowIter {
             tree_patch: self,
             row,
-            current: 0,
-            current_back: self.size.0.checked_sub(1),
+            col_front: 0,
+            col_back: self.size.0.checked_sub(1),
         }
     }
 
@@ -70,8 +74,8 @@ impl<T> TreePatch<T> {
         ColIter {
             tree_patch: self,
             col,
-            current: 0,
-            current_back: self.size.1.checked_sub(1),
+            row_front: 0,
+            row_back: self.size.1.checked_sub(1),
         }
     }
 
@@ -118,13 +122,7 @@ impl TreePatch<u8> {
         for i in 0..self.n_rows() {
             let mut highest = 0;
             for (j, h) in self.row(i).enumerate() {
-                // println!("{i}, {j}, {highest}, {h}");
-                if i == 0 || i == self.n_rows() - 1 || j == 0 || j == self.n_cols() - 1 {
-                    assert!(tp.insert((i, j), false).is_none());
-                } else {
-                    assert!(tp.insert((i, j), *h <= highest).is_none());
-                }
-                highest = highest.max(*h);
+                highest = tp.set_hidden(i, j, *h, highest);
             }
         }
         tp
@@ -136,13 +134,7 @@ impl TreePatch<u8> {
         for i in 0..self.n_rows() {
             let mut highest = 0;
             for (j, h) in self.row(i).enumerate().rev() {
-                // println!("{i}, {j}, {highest}, {h}");
-                if i == 0 || i == self.n_rows() - 1 || j == 0 || j == self.n_cols() - 1 {
-                    assert!(tp.insert((i, j), false).is_none());
-                } else {
-                    assert!(tp.insert((i, j), *h <= highest).is_none());
-                }
-                highest = highest.max(*h);
+                highest = tp.set_hidden(i, j, *h, highest);
             }
         }
         tp
@@ -154,13 +146,7 @@ impl TreePatch<u8> {
         for j in 0..self.n_cols() {
             let mut highest = 0;
             for (i, h) in self.col(j).enumerate() {
-                // println!("{i}, {j}, {highest}, {h}");
-                if i == 0 || i == self.n_rows() - 1 || j == 0 || j == self.n_cols() - 1 {
-                    assert!(tp.insert((i, j), false).is_none());
-                } else {
-                    assert!(tp.insert((i, j), *h <= highest).is_none());
-                }
-                highest = highest.max(*h);
+                highest = tp.set_hidden(i, j, *h, highest);
             }
         }
         tp
@@ -172,16 +158,26 @@ impl TreePatch<u8> {
         for j in 0..self.n_cols() {
             let mut highest = 0;
             for (i, h) in self.col(j).enumerate().rev() {
-                // println!("{i}, {j}, {highest}, {h}");
-                if i == 0 || i == self.n_rows() - 1 || j == 0 || j == self.n_cols() - 1 {
-                    assert!(tp.insert((i, j), false).is_none());
-                } else {
-                    assert!(tp.insert((i, j), *h <= highest).is_none());
-                }
-                highest = highest.max(*h);
+                highest = tp.set_hidden(i, j, *h, highest);
             }
         }
         tp
+    }
+}
+
+impl TreePatch<bool> {
+    /// Set the hidden state for a tree-top in the [`TreePatch`] slot at `row` and `col` with `height`.
+    ///
+    /// Returns the new highest tree height.
+    fn set_hidden(&mut self, row: usize, col: usize, height: u8, highest: u8) -> u8 {
+        if row == 0 || row == self.n_rows() - 1 || col == 0 || col == self.n_cols() - 1 {
+            // The tree-top is not hidden if it is on the edge of the tree patch:
+            self.insert((row, col), false);
+        } else {
+            // Otherwise, we base it's hidden-ness on the highest visited tree
+            self.insert((row, col), height <= highest);
+        }
+        highest.max(height)
     }
 }
 
@@ -200,43 +196,34 @@ impl BitAnd for TreePatch<bool> {
 struct RowIter<'a, T> {
     tree_patch: &'a TreePatch<T>,
     row: usize,
-    current: usize,
-    current_back: Option<usize>,
+    col_front: usize,
+    col_back: Option<usize>,
 }
 
 impl<'a, T> Iterator for RowIter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.tree_patch.grid.get(&(self.row, self.current)) {
-            Some(v) => {
-                self.current += 1;
-                Some(v)
-            }
-            None => None,
-        }
+        let col_front = self.col_front;
+        self.col_front += 1;
+        self.tree_patch.grid.get(&(self.row, col_front))
     }
 }
 
 impl<'a, T> DoubleEndedIterator for RowIter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        match self
-            .current_back
-            .and_then(|cb| self.tree_patch.grid.get(&(self.row, cb)))
-        {
-            Some(v) => {
-                self.current_back = self.current_back.and_then(|cb| cb.checked_sub(1));
-                Some(v)
-            }
-            None => None,
-        }
+        let Some(col_back) = self.col_back else {
+            return None;
+        };
+        self.col_back = col_back.checked_sub(1);
+        self.tree_patch.grid.get(&(self.row, col_back))
     }
 }
 
 impl<'a, T> ExactSizeIterator for RowIter<'a, T> {
     fn len(&self) -> usize {
-        match self.current_back {
-            Some(cb) => cb + 1 - self.current,
+        match self.col_back {
+            Some(cb) => cb + 1 - self.col_front,
             None => 0,
         }
     }
@@ -245,43 +232,34 @@ impl<'a, T> ExactSizeIterator for RowIter<'a, T> {
 struct ColIter<'a, T> {
     tree_patch: &'a TreePatch<T>,
     col: usize,
-    current: usize,
-    current_back: Option<usize>,
+    row_front: usize,
+    row_back: Option<usize>,
 }
 
 impl<'a, T> Iterator for ColIter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.tree_patch.grid.get(&(self.current, self.col)) {
-            Some(v) => {
-                self.current += 1;
-                Some(v)
-            }
-            None => None,
-        }
+        let row_front = self.row_front;
+        self.row_front += 1;
+        self.tree_patch.grid.get(&(row_front, self.col))
     }
 }
 
 impl<'a, T> DoubleEndedIterator for ColIter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        match self
-            .current_back
-            .and_then(|cb| self.tree_patch.grid.get(&(cb, self.col)))
-        {
-            Some(v) => {
-                self.current_back = self.current_back.and_then(|cb| cb.checked_sub(1));
-                Some(v)
-            }
-            None => None,
-        }
+        let Some(row_back) = self.row_back else {
+            return None;
+        };
+        self.row_back = row_back.checked_sub(1);
+        self.tree_patch.grid.get(&(row_back, self.col))
     }
 }
 
 impl<'a, T> ExactSizeIterator for ColIter<'a, T> {
     fn len(&self) -> usize {
-        match self.current_back {
-            Some(cb) => cb + 1 - self.current,
+        match self.row_back {
+            Some(rb) => rb + 1 - self.row_front,
             None => 0,
         }
     }
