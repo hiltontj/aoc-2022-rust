@@ -88,32 +88,31 @@ impl<T> TreePatch<T> {
     }
 }
 
+fn char_to_u8(c: char) -> u8 {
+    match c {
+        '0' => 0,
+        '1' => 1,
+        '2' => 2,
+        '3' => 3,
+        '4' => 4,
+        '5' => 5,
+        '6' => 6,
+        '7' => 7,
+        '8' => 8,
+        '9' => 9,
+        _ => panic!("invalid char {c}"),
+    }
+}
+
 impl TreePatch<u8> {
     fn from_file<P: AsRef<Path>>(path: P) -> Self {
-        let mut grid = HashMap::new();
+        let mut tp = TreePatch::new();
         for (i, line) in get_lines(path).map(Result::unwrap).enumerate() {
             for (j, c) in line.chars().enumerate() {
-                match c {
-                    '0'..='9' => assert!(
-                        grid.insert((i, j), u8::try_from(c).unwrap() - 48).is_none(),
-                        "insert at ({i}, {j}) was already occupied"
-                    ),
-                    unexpected => panic!("unexpected character: {unexpected}"),
-                }
+                tp.insert((i, j), char_to_u8(c));
             }
         }
-        let mut size = (0, 0);
-        for (i, j) in grid.keys() {
-            if *i > size.0 {
-                size.0 = *i;
-            }
-            if *j > size.1 {
-                size.1 = *j;
-            }
-        }
-        size.0 += 1;
-        size.1 += 1;
-        Self { grid, size }
+        tp
     }
 
     fn row_wise_forward(&self) -> TreePatch<bool> {
