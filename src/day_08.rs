@@ -18,6 +18,11 @@ pub fn answer_part_1() -> u64 {
     result
 }
 
+pub fn answer_part_2() -> u64 {
+    let tp = TreePatch::from_file("input/day_08.txt");
+    tp.score()
+}
+
 struct TreePatch<T> {
     grid: HashMap<(usize, usize), T>,
     size: (usize, usize),
@@ -70,12 +75,30 @@ impl<T> TreePatch<T> {
         }
     }
 
+    fn row_bounded(&self, row: usize, start: Option<usize>, end: Option<usize>) -> RowIter<'_, T> {
+        RowIter {
+            tree_patch: self,
+            row,
+            col_front: start.unwrap_or(0),
+            col_back: end.or_else(|| Some(self.n_cols() - 1)),
+        }
+    }
+
     fn col(&self, col: usize) -> ColIter<'_, T> {
         ColIter {
             tree_patch: self,
             col,
             row_front: 0,
             row_back: self.size.1.checked_sub(1),
+        }
+    }
+
+    fn col_bounded(&self, col: usize, start: Option<usize>, end: Option<usize>) -> ColIter<'_, T> {
+        ColIter {
+            tree_patch: self,
+            col,
+            row_front: start.unwrap_or(0),
+            row_back: end.or_else(|| Some(self.n_rows() - 1)),
         }
     }
 
@@ -161,6 +184,45 @@ impl TreePatch<u8> {
             }
         }
         tp
+    }
+
+    fn score(&self) -> u64 {
+        let mut best = 0;
+        for ((i, j), this) in &self.grid {
+            if *i == 0 || *j == 0 || *i == self.n_rows() - 1 || *j == self.n_cols() - 1 {
+                continue;
+            }
+            let mut up = 0;
+            for other in self.col_bounded(*j, None, Some(i - 1)).rev() {
+                up += 1;
+                if other >= this {
+                    break;
+                }
+            }
+            let mut left = 0;
+            for other in self.row_bounded(*i, None, Some(j - 1)).rev() {
+                left += 1;
+                if other >= this {
+                    break;
+                }
+            }
+            let mut down = 0;
+            for other in self.col_bounded(*j, Some(i + 1), None) {
+                down += 1;
+                if other >= this {
+                    break;
+                }
+            }
+            let mut right = 0;
+            for other in self.row_bounded(*i, Some(j + 1), None) {
+                right += 1;
+                if other >= this {
+                    break;
+                }
+            }
+            best = best.max(up * down * left * right);
+        }
+        best
     }
 }
 

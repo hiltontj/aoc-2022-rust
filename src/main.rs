@@ -28,4 +28,5 @@ fn main() {
     );
     println!("Day 7 (Part 2): {answer}", answer = day_07::answer_part_2());
     println!("Day 8 (Part 1): {answer}", answer = day_08::answer_part_1());
+    println!("Day 8 (Part 2): {answer}", answer = day_08::answer_part_2());
 }
